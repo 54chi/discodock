@@ -15,9 +15,6 @@ ENV GOSU_VERSION 1.7
 ENV PG_MAJOR 9.6
 ENV PG_VERSION 9.6.1-2.pgdg80+1
 
-# Install git
-RUN apt-get -y install git
-
 # Install gosu for easy step-down from root
 RUN set -x \
 	&& apt-get update && apt-get install -y --no-install-recommends ca-certificates wget && rm -rf /var/lib/apt/lists/* \
@@ -28,17 +25,15 @@ RUN set -x \
 	&& gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu \
 	&& rm -r "$GNUPGHOME" /usr/local/bin/gosu.asc \
 	&& chmod +x /usr/local/bin/gosu \
-	&& gosu nobody true \
-	&& apt-get purge -y --auto-remove ca-certificates wget
+	&& gosu nobody true
 
-# Install Postgres
+# Install POSTGRES
+# The apt-get method is still at 9.4...may be a reason for that
   RUN groupadd -r postgres --gid=999 && useradd -r -g postgres --uid=999 postgres
 
-  RUN apt-get install -y locales && rm -rf /var/lib/apt/lists/* \
+  RUN apt-get update && apt-get install -y locales && rm -rf /var/lib/apt/lists/* \
   	&& localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
   ENV LANG en_US.utf8
-
-  RUN mkdir /docker-entrypoint-initdb.d
 
   RUN set -ex; \
   # pub   4096R/ACCC4CF8 2011-10-13 [expires: 2019-07-02]
@@ -73,56 +68,42 @@ RUN set -x \
   RUN mkdir -p "$PGDATA" && chown -R postgres:postgres "$PGDATA" && chmod 777 "$PGDATA" # this 777 will be replaced by 700 at runtime (allows semi-arbitrary "--user" values)
   VOLUME /var/lib/postgresql/data
 
-  COPY docker-entrypoint.sh /
+# Install GIT
+  RUN apt-get update && apt-get -y install git
 
 # Install REDIS Stable
-RUN \
-  cd /tmp && \
-  wget http://download.redis.io/redis-stable.tar.gz && \
-  tar xvzf redis-stable.tar.gz && \
-  cd redis-stable && \
-  make && \
-  make install && \
-  cp -f src/redis-sentinel /usr/local/bin && \
-  mkdir -p /etc/redis && \
-  cp -f *.conf /etc/redis && \
-  rm -rf /tmp/redis-stable* && \
-  sed -i 's/^\(bind .*\)$/# \1/' /etc/redis/redis.conf && \
-  sed -i 's/^\(daemonize .*\)$/# \1/' /etc/redis/redis.conf && \
-  sed -i 's/^\(dir .*\)$/# \1\ndir \/data/' /etc/redis/redis.conf && \
-  sed -i 's/^\(logfile .*\)$/# \1/' /etc/redis/redis.conf
+  RUN apt-get update && apt-get install -y redis-server
 
+# Install SCALA
+# Alternative method: https://gist.github.com/osipov/c2a34884a647c29765ed
+  RUN touch /usr/lib/jvm/java-8-openjdk-amd64/release
+  RUN \
+    curl -fsL http://downloads.lightbend.com/scala/$SCALA_VERSION/scala-$SCALA_VERSION.tgz | tar xfz - -C /root/ && \
+    echo >> /root/.bashrc && \
+    echo 'export PATH=~/scala-$SCALA_VERSION/bin:$PATH' >> /root/.bashrc
 
-# Scala expects this file
-RUN touch /usr/lib/jvm/java-8-openjdk-amd64/release
+# Install SBT
+  RUN \
+    curl -L -o sbt-$SBT_VERSION.deb http://dl.bintray.com/sbt/debian/sbt-$SBT_VERSION.deb && \
+    dpkg -i sbt-$SBT_VERSION.deb && \
+    rm sbt-$SBT_VERSION.deb && \
+    apt-get update && \
+    apt-get install sbt && \
+    sbt sbtVersion && \
+    apt-get purge -y --auto-remove ca-certificates wget
 
-# Install Scala. You may not need this depending on your sbt setup
-RUN \
-  curl -fsL http://downloads.lightbend.com/scala/$SCALA_VERSION/scala-$SCALA_VERSION.tgz | tar xfz - -C /root/ && \
-  echo >> /root/.bashrc && \
-  echo 'export PATH=~/scala-$SCALA_VERSION/bin:$PATH' >> /root/.bashrc
+# Finishing Configuration
+  # Define mountable directories.
+  VOLUME ["/data"]
 
-# Install sbt
-RUN \
-  curl -L -o sbt-$SBT_VERSION.deb http://dl.bintray.com/sbt/debian/sbt-$SBT_VERSION.deb && \
-  dpkg -i sbt-$SBT_VERSION.deb && \
-  rm sbt-$SBT_VERSION.deb && \
-  apt-get update && \
-  apt-get install sbt && \
-  sbt sbtVersion
+  # Define working directory
+  WORKDIR /root
 
+  ENTRYPOINT  ["/usr/bin/redis-server"]
 
-# Define mountable directories.
-VOLUME ["/data"]
+  # Define default command.
+  CMD ["redis-server", "/etc/redis/redis.conf"]
 
-# Define working directory
-WORKDIR /root
-
-ENTRYPOINT ["/docker-entrypoint.sh"]
-
-# Define default command.
-CMD ["redis-server", "/etc/redis/redis.conf"]
-
-# Expose ports (6379 redis, 5432 postgres).
-EXPOSE 6379 5432
-CMD ["postgres"]
+  # Expose ports (6379 redis, 5432 postgres).
+  EXPOSE 6379 5432
+  CMD ["postgres"]

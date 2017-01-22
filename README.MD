@@ -19,7 +19,7 @@ I assume that you are familiar with Docker. If not, [here is the official docume
 
 1. Install Docker
 1. Build the image from my Dockerfile:
-`docker build -t 54chi/discodock github.com/54chi/discodock`
+`docker build -t 54chi/discodock:latest github.com/54chi/discodock`
 
 ## Usage
 
@@ -30,7 +30,10 @@ I assume that you are familiar with Docker. If not, [here is the official docume
 This code is open source software licensed under the MIT License.
 
 ## To dos:
+[ ] Exposed ports and running commands for Redis and Postgres servers
 
-[ ] The base image for the container is the [openjdk:8](https://github.com/docker-library/openjdk). Does the trick, and can be reused for other containers, but prob. would be better to create a base image from scratch.
+[ ] If it makes more sense, add a docker compose file and split it into separate containers (e.g. one scala, one postgres, one redis)
 
 [ ] Put together a list of frequent commands (e.g. rebuild, stop, start containers, compile scala, redis, psql, etc.)
+
+[ ] The base image for the container is the [openjdk:8](https://github.com/docker-library/openjdk). Does the trick, and can be reused for other containers, but prob. would be better to create a base image from scratch.
